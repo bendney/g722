@@ -301,7 +301,7 @@ char * channel_record_start(esl_handle_t * handle, const char * uuid)
 	}
 
 	esl_snprintf(command, sizeof(command),
-			"uuid_record %s start /tmp/record/%s.wav",
+			"uuid_record %s start /tmp/record/%s.mp3",
 			member->callee_uuid, member->callee_uuid);
 	result = fgapi_execute(handle, command);
 
@@ -329,7 +329,7 @@ char * channel_record_stop(esl_handle_t * handle, const char * uuid)
 	}
 
 	esl_snprintf(command, sizeof(command),
-			"uuid_record %s stop /tmp/record/%s.wav",
+			"uuid_record %s stop /tmp/record/%s.mp3",
 			member->callee_uuid, member->callee_uuid);
 	result = fgapi_execute(handle, command);
 
@@ -343,16 +343,16 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 	CHAIN_MEMBER * member = NULL;
 	GList * seris_uuid = NULL;
 
-	/*
 	esl_log(ESL_LOG_INFO, "Event Socket Library event id %d\n", event->event_id);
-	*/
+
 	switch (event->event_id) {
 		case ESL_EVENT_CHANNEL_CREATE:
 		{
 			const char * uuid = esl_event_get_header(event, "Unique-ID");
 			const char * channel_uuid = esl_event_get_header(event, "Channel-Call-UUID");
 			const char * direction = esl_event_get_header(event, "Call-Direction");
-
+			esl_log(ESL_LOG_INFO, "Channel %s create direction %s\n", uuid, direction);
+#if 0
 			/* In case receive park operation create channel and inbound channel */
 			if (!strcasecmp(uuid, channel_uuid)
 				|| !strcasecmp(direction, "inbound")) {
@@ -374,12 +374,15 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 			esl_mutex_unlock(venilla_list_mutex);
 
 			esl_log(ESL_LOG_INFO, "Channel %s create\n", member->callee_uuid);
+#endif
 
 			break;
 		}
 		case ESL_EVENT_CHANNEL_DESTROY:
 		{
 			char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s destory\n", uuid);
+#if 0
 
 			/* Destory the call chain space, find member by channel uuid */
 			esl_mutex_lock(venilla_list_mutex);
@@ -412,6 +415,7 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 				free(member);
 			}
 			member = NULL;
+#endif
 
 			break;
 		}
@@ -419,12 +423,15 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 		{
 			const char * uuid = esl_event_get_header(event, "Unique-ID");
 
+			/*
 			esl_log(ESL_LOG_INFO, "Channel %s record start\n", uuid);
 
 			result = channel_record_start(handle, uuid);
 			if (result == NULL) {
 				break;
 			}
+			*/
+			esl_log(ESL_LOG_INFO, "Channel %s answer\n", uuid);
 
 			break;
 		}
@@ -432,12 +439,15 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 		{
 			const char * uuid = esl_event_get_header(event, "Unique-ID");
 
+			/*
 			esl_log(ESL_LOG_INFO, "Channel %s record stop\n", uuid);
 
 			result = channel_record_stop(handle, uuid);
 			if (result == NULL) {
 				break;
 			}
+			*/
+			esl_log(ESL_LOG_INFO, "Channel %s hangup\n", uuid);
 
 			break;
 		}
@@ -446,6 +456,9 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 			char * uuid = esl_event_get_header(event, "Unique-ID");
 			const char * state = esl_event_get_header(event, "Channel-Call-State");
 
+			esl_log(ESL_LOG_INFO, "Channel %s state %s\n", uuid, state);
+
+#if 0
 			/* Index the call_chain array, get parked agent uuid */
 			esl_mutex_lock(venilla_list_mutex);
 			seris_uuid = g_list_find_custom(venilla_list, (gpointer)uuid, (GCompareFunc)compare_agent);
@@ -454,10 +467,9 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 				break;
 			}
 
-			esl_log(ESL_LOG_INFO, "Channel %s state %s\n", uuid, state);
-
 			member = (CHAIN_MEMBER *)(seris_uuid->data);
 			strncpy(member->channel_state, state, 16);
+#endif
 
 			break;
 		}
@@ -465,7 +477,7 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 		{
 			char * uuid = esl_event_get_header(event, "Unique-ID");
 			const char * callerId = esl_event_get_header(event, "Caller-Caller-ID-Number");
-
+#if 0
 			/* Index the call_chain array, get parked agent uuid */
 			esl_mutex_lock(venilla_list_mutex);
 			seris_uuid = g_list_find_custom(venilla_list, (gpointer)uuid, (GCompareFunc)compare_agent);
@@ -488,81 +500,71 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 			bgapi_execute(handle, command);
 
 			strncpy(member->channel_state, "PARKING", 16);
+#endif
 
 			break;
 		}
-		case ESL_EVENT_DTMF:
+		case ESL_EVENT_CHANNEL_EXECUTE:
 		{
-			char callee_number[16];
-			char * dest_number = NULL;
-			char * agent_number = NULL;
-			char * uuid = esl_event_get_header(event, "Unique-ID");
-			const char * callerId = esl_event_get_header(event, "Caller-Caller-ID-Number");
-			const char * dtmf_tone = esl_event_get_header(event, "DTMF-DIGIT");
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s execute\n", uuid);
 
-			dest_number = esl_event_get_header(event, "Caller-Destination-Number");
-
-			esl_log(ESL_LOG_INFO, "Channel %s dtmf %s detected\n", uuid, dtmf_tone);
-			strncpy(callee_number, dest_number, 16);
-
-			/* Find node from chain list according to caller number */
-			esl_mutex_lock(venilla_list_mutex);
-			seris_uuid = g_list_find_custom(venilla_list, (gpointer)uuid, (GCompareFunc)compare_caller);
-			esl_mutex_unlock(venilla_list_mutex);
-			if (seris_uuid == NULL) {
-				break;
-			}
-
-			member = (CHAIN_MEMBER *)(seris_uuid->data);
-
-			if (!strcasecmp(dtmf_tone, TONE_PARK)) {
-
-				if (!strcasecmp(member->channel_state, "RINGING")
-					|| !strcasecmp(member->channel_state, "ACTIVE")) {
-					break;
-				}
-
-				list_node * xml_node = list_find(xml_list, search_by_caller, (void *)callerId);
-				if (xml_node == NULL) {
-					break;
-				}
-				AGENT_NODE * agent_member = (AGENT_NODE *)(xml_node->data);
-
-				/* Check avaiable agent number to parak TO-DO:mutex lock */
-				agent_number = internal_reg_list(handle, agent_member);
-				if (agent_number == NULL ) {
-					break;
-				}
-				esl_log(ESL_LOG_INFO, "Channel %s agent %s found\n", member->caller_uuid,  agent_number);
-
-				/* Create uuid for agent and originate agent park */
-				result = fgapi_execute(handle, "create_uuid");
-				if (!strcasecmp(result , "ERR")) {
-					break;
-				}
-
-				strncpy(member->agent_uuid, result, 48);
-
-				esl_snprintf(command, sizeof(command),
-						"originate {origination_uuid=%s,origination_caller_id_number=%s}user/%s &park()",
-						member->agent_uuid, callee_number, agent_number);
-				bgapi_execute(handle, command);
-			}
-			if (!strcasecmp(dtmf_tone, TONE_BRIDGE)) {
-				/* Bridge customer with agent */
-				esl_snprintf(command, sizeof(command),
-						"uuid_bridge %s %s", member->agent_uuid, member->callee_uuid);
-				esl_log(ESL_LOG_DEBUG,
-						"uuid_bridge %s %s", member->agent_uuid, member->callee_uuid);
-				result = fgapi_execute(handle, command);
-				if (strstr(result, "-ERR")) {
-					esl_snprintf(command, sizeof(command),
-							"uuid_send_dtmf %s #*", member->caller_uuid, callerId);
-					fgapi_execute(handle, command);
-				}
-			}
 			break;
 		}
+
+		case ESL_EVENT_CHANNEL_PROGRESS:
+		{
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s progress\n", uuid);
+
+			break;
+		}
+		case ESL_EVENT_CHANNEL_PROGRESS_MEDIA:
+		{
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s progress media\n", uuid);
+
+			break;
+		}
+		case ESL_EVENT_CHANNEL_UUID:
+		{
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s uuid\n", uuid);
+
+			break;
+		}
+		case ESL_EVENT_CHANNEL_OUTGOING:
+		{
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s outgoing\n", uuid);
+
+			break;
+		}
+		case ESL_EVENT_HEARTBEAT:
+		{
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s HEARTBEAT\n", uuid);
+
+			break;
+		}
+#if 0
+	ESL_EVENT_CHANNEL_HANGUP,
+	ESL_EVENT_CHANNEL_HANGUP_COMPLETE,
+	ESL_EVENT_CHANNEL_EXECUTE,
+	ESL_EVENT_CHANNEL_EXECUTE_COMPLETE,
+	ESL_EVENT_CHANNEL_HOLD,
+	ESL_EVENT_CHANNEL_UNHOLD,
+	ESL_EVENT_CHANNEL_BRIDGE,
+	ESL_EVENT_CHANNEL_UNBRIDGE,
+	ESL_EVENT_CHANNEL_PROGRESS,
+	ESL_EVENT_CHANNEL_PROGRESS_MEDIA,
+	ESL_EVENT_CHANNEL_OUTGOING,
+	ESL_EVENT_CHANNEL_PARK,
+	ESL_EVENT_CHANNEL_UNPARK,
+	ESL_EVENT_CHANNEL_APPLICATION,
+	ESL_EVENT_CHANNEL_ORIGINATE,
+	ESL_EVENT_CHANNEL_UUID,
+#endif
 		default:
 			break;
 	}
@@ -599,11 +601,12 @@ int main(void)
 	}
 
 	esl_log(ESL_LOG_INFO, "Connected to FreeSWITCH\n");
-	esl_events(&handle, ESL_EVENT_TYPE_PLAIN,
-			"CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CHANNEL_PARK DTMF");
+	esl_events(&handle, ESL_EVENT_TYPE_PLAIN,"ALL");
+			//"CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CHANNEL_PARK DTMF");
 
 	esl_log(ESL_LOG_INFO, "%s\n", handle.last_sr_reply);
 
+#if 0
 	esl_mutex_create(&venilla_list_mutex);
 
 	xml_list = list_create(NULL);
@@ -611,20 +614,22 @@ int main(void)
 	document = xml_document_attach();
 
 	xml_element_parse(document, xml_list);
+#endif
 
 	handle.event_lock = 1;
 	while ((esl_recv_event(&handle, 1, NULL)) == ESL_SUCCESS) {
 		if (handle.last_ievent) {
-
 			event_control(&handle, handle.last_ievent);
 		}
 	}
 
+#if 0
 	list_destroy(&xml_list);
 
 	xml_document_dettach(document);
 
 	esl_mutex_destroy(&venilla_list_mutex);
+#endif
 
 	esl_disconnect(&handle);
 	
