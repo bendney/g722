@@ -13,35 +13,47 @@ import (
 )
 
 type Profile struct {
-	Name  string
-	Value string
+	Version          string `json:"version"`
+	Sequence         string `json:"sequence"`
+	PlanId           string `json:"plan_id"`
+	RobotIndex       string `json:"robot_index"`
+	CallId           string `json:"call_id"`
+	CallerId         string `json:"caller_id"`
+	Callee           string `json:"callee"`
+	AsrEngine        string `json:"asr_engine"`
+	TemplateId       string `json:"template_id"`
+	AudioRecord      string `json:"audio_record"`
+	Record_path      string `json:"record_path"`
+	EarlyMediaRecord string `json:"early_media_record"`
+	NlpServer        string `json:"nlp_server"`
+	AsrServer        string `json:"asr_server"`
 }
 
-const originator_uuid = "2242dee0-35b6-11e9-b900-355947430f71"
-
-//const dialplan = "&socket(localhost:9090 async)"
-
 func main() {
-	client, err := eventsocket.Dial("localhost:8021", "ClueCon")
+	client, err := eventsocket.Dial("127.0.0.1:8021", "ClueCon")
 	if err != nil {
 		log.Fatal(err)
 	}
-	client.Send("events json CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CUSTOM robot::report")
-	//c.Send("events json ALL")
 
-	var profile = []Profile{{"Alex", "snowboarding"}, {"Six", "swimming"}}
+	const originator_uuid = "2242dee0-35b6-11e9-b900-355947430f71"
+	var phone string = "18625221611"
+	var server string = "10.10.5.250"
+
+	client.Send("events json CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CUSTOM robot::report")
+
+	var profile = Profile{"1.0", "6757", "10050", "10", "a-3892e9971c5d4b378b4fe17e9770d4d8", "2", "91008", "keda", "template_001", "1", "/tmp/log/a-3892e9971c5d4b378b4fe17e9770d4d8", "1", "10.200.1.37:18086", "10.20.4.139:4000"}
 	js, err := json.Marshal(profile)
 	if err != nil {
 		return
 	}
+	fmt.Printf("Robot input parameter %s\n", js)
 
-	//c.Send(fmt.Sprintf("bgapi originate %s %s", dest, dialplan))
+	jsondata := []byte(`{"version":"1.0"\,"sequence":"6757"\,"plan_id":"10050"\,"robot_index":"10"\,"call_id":"a-f6f0cf6fe5c9479d876c9eae61857ffa"\,"caller_id":"2"\,"callee":"91008"\,"asr_engine":"keda"\,"template_id":"template_001"\,"audio_record":"1"\,"record_path":"/tmp/log/a-f6f0cf6fe5c9479d876c9eae61857ffa"\,"early_media_record":"1"\,"nlp_server":"10.20.4.218:8080"\,"asr_server":"10.100.2.38:4000"}`)
 
-	fmt.Printf("Testing JSON %s\n", js)
+	command := fmt.Sprintf("bgapi originate {origination_caller_id_number=853692}sofia/external/%s@%s &bridge({origination_uuid=%s,sip_status=183,robot_input=%s}Robot)\n", phone, server, originator_uuid, jsondata)
+	fmt.Println(command)
 
-	jsondata := []byte(`{"version":"1.0"\,"sequence":"6757"\,"plan_id":"10050"\,"robot_index":"10"\,"call_id":"a-3892e9971c5d4b378b4fe17e9770d4d8"\,"caller_id":"2"\,"callee":"91008"\,"asr_engine":"keda"\,"template_id":"template_001"\,"audio_record":"1"\,"record_path":"/tmp/log/7892_10050_1017_1008"\,"early_media_record":"1"\,"nlp_server":"10.200.1.37:18086"\,"asr_server":"10.20.5.44:4000"}`)
-
-	client.Send(fmt.Sprintf("bgapi originate {origination_caller_id_number=853692}sofia/external/18625221611@140.206.80.114 &bridge({origination_uuid=2242dee0-35b6-11e9-b900-355947430f71,sip_status=183,robot_input=%s}Robot)\n", jsondata))
+	client.Send(command)
 
 	for {
 		ev, err := client.ReadEvent()
@@ -52,13 +64,15 @@ func main() {
 		fmt.Println("Received Event", ev.Get("Event-Name"))
 
 		if ev.Get("Event-Name") == "CHANNEL_ANSWER" {
-			fmt.Println("UUID", ev.Get("Unique-Id"))
-			if ev.Get("Other-Leg-Unique-Id") == originator_uuid {
-				client.Send("bgapi uuid_send_message 2242dee0-35b6-11e9-b900-355947430f71 sip_status")
+			if ev.Get("Other-Type") == "originatee" {
+				client.Send(fmt.Sprintf("bgapi uuid_send_message %s sip_status", ev.Get("Other-Leg-Unique-Id")))
 			}
 		}
 		if ev.Get("Event-Name") == "CUSTOM" {
-			ev.PrettyPrint()
+			fmt.Println("variable uuid", ev.Get("Variable_uuid"))
+			fmt.Println("subclass", ev.Get("Event-Subclass"))
+			fmt.Println("Event-Info", ev.Get("Event-Info"))
+			//ev.PrettyPrint()
 		}
 
 		/*

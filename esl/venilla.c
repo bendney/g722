@@ -547,6 +547,14 @@ static void event_control(esl_handle_t *handle, esl_event_t *event)
 
 			break;
 		}
+		case ESL_EVENT_CUSTOM:
+		{
+			const char * uuid = esl_event_get_header(event, "Unique-ID");
+			esl_log(ESL_LOG_INFO, "Channel %s CUSTOM\n", uuid);
+
+			break;
+		}
+
 #if 0
 	ESL_EVENT_CHANNEL_HANGUP,
 	ESL_EVENT_CHANNEL_HANGUP_COMPLETE,
@@ -601,8 +609,7 @@ int main(void)
 	}
 
 	esl_log(ESL_LOG_INFO, "Connected to FreeSWITCH\n");
-	esl_events(&handle, ESL_EVENT_TYPE_PLAIN,"ALL");
-			//"CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CHANNEL_PARK DTMF");
+	esl_events(&handle, ESL_EVENT_TYPE_PLAIN, "CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CHANNEL_PARK DTMF CUSTOM robot::report");
 
 	esl_log(ESL_LOG_INFO, "%s\n", handle.last_sr_reply);
 
