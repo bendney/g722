@@ -8,8 +8,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fiorix/go-eventsocket/eventsocket"
 	"log"
+	"github.com/fiorix/go-eventsocket/eventsocket"
 )
 
 type Profile struct {
@@ -35,44 +35,48 @@ func main() {
 		log.Fatal(err)
 	}
 
-	const originator_uuid = "2242dee0-35b6-11e9-b900-355947430f71"
-	var phone string = "18625221611"
-	var server string = "10.10.5.250"
+	const originator_uuid string = "2242dee0-35b6-11e9-b900-355947430f71"
+	const phone_number string = "18625221611"
+	const sip_server string = "10.10.5.250"
 
 	client.Send("events json CHANNEL_CREATE CHANNEL_DESTROY CHANNEL_ANSWER CHANNEL_HANGUP CHANNEL_CALLSTATE CUSTOM robot::report")
 
-	var profile = Profile{"1.0", "6757", "10050", "10", "a-3892e9971c5d4b378b4fe17e9770d4d8", "2", "91008", "keda", "template_001", "1", "/tmp/log/a-3892e9971c5d4b378b4fe17e9770d4d8", "1", "10.200.1.37:18086", "10.20.4.139:4000"}
-	js, err := json.Marshal(profile)
+	var profile = Profile{"1.0", "6757", "10050", "10", "a-f6f0cf6fe5c9479d876c9eae61857ffa", "2", "91008", "keda", "template_001", "1", "/tmp/log/a-f6f0cf6fe5c9479d876c9eae61857ffa", "1", "10.200.1.37:18086", "10.100.2.38:4000"}
+	json, err := json.Marshal(profile)
 	if err != nil {
 		return
 	}
-	fmt.Printf("Robot input parameter %s\n", js)
+	json_byte := fmt.Sprintf("`%s`", json)
 
-	jsondata := []byte(`{"version":"1.0"\,"sequence":"6757"\,"plan_id":"10050"\,"robot_index":"10"\,"call_id":"a-f6f0cf6fe5c9479d876c9eae61857ffa"\,"caller_id":"2"\,"callee":"91008"\,"asr_engine":"keda"\,"template_id":"template_001"\,"audio_record":"1"\,"record_path":"/tmp/log/a-f6f0cf6fe5c9479d876c9eae61857ffa"\,"early_media_record":"1"\,"nlp_server":"10.20.4.218:8080"\,"asr_server":"10.100.2.38:4000"}`)
+	rawIn, err := json.Marshal(json_byte)
+	if err != nil {
+		return
+	}
 
-	command := fmt.Sprintf("bgapi originate {origination_caller_id_number=853692}sofia/external/%s@%s &bridge({origination_uuid=%s,sip_status=183,robot_input=%s}Robot)\n", phone, server, originator_uuid, jsondata)
+	command := fmt.Sprintf("bgapi originate {origination_caller_id_number=853692}sofia/external/%s@%s &bridge({origination_uuid=%s,sip_status=183,robot_input=%s}Robot)\n",
+	phone_number, sip_server, originator_uuid, string(rawIn))
 	fmt.Println(command)
 
 	client.Send(command)
 
 	for {
-		ev, err := client.ReadEvent()
+		event, err := client.ReadEvent()
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fmt.Println("Received Event", ev.Get("Event-Name"))
+		//fmt.Println("Received Event", event.Get("Event-Name"))
 
-		if ev.Get("Event-Name") == "CHANNEL_ANSWER" {
-			if ev.Get("Other-Type") == "originatee" {
-				client.Send(fmt.Sprintf("bgapi uuid_send_message %s sip_status", ev.Get("Other-Leg-Unique-Id")))
+		if event.Get("Event-Name") == "CHANNEL_ANSWER" {
+			if event.Get("Other-Type") == "originatee" {
+				client.Send(fmt.Sprintf("bgapi uuid_send_message %s sip_status", event.Get("Other-Leg-Unique-Id")))
 			}
 		}
-		if ev.Get("Event-Name") == "CUSTOM" {
-			fmt.Println("variable uuid", ev.Get("Variable_uuid"))
-			fmt.Println("subclass", ev.Get("Event-Subclass"))
-			fmt.Println("Event-Info", ev.Get("Event-Info"))
-			//ev.PrettyPrint()
+
+		if event.Get("Event-Name") == "CUSTOM" {
+			fmt.Println("Event-Subclass", event.Get("Event-Subclass"))
+			fmt.Println("Variable_uuid", event.Get("Variable_uuid"))
+			fmt.Println("Event-Info", event.Get("Event_Info"))
 		}
 
 		/*
@@ -82,5 +86,8 @@ func main() {
 			}
 		*/
 	}
+
 	client.Close()
 }
+
+

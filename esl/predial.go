@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk"
+	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 )
 
 type Content struct {
@@ -19,8 +21,20 @@ type Content struct {
 	VacantNumberType string `json:"vacantNumberType"`
 }
 
+type Result struct {
+	NlsRequestId string `json:"NlsRequestId"`
+	RequestId    string `json:"RequestId"`
+	Token		 TokenSub  `json:"Token"`
+}
+
+type TokenSub struct {
+	ExpireTime int64
+	Id		   string
+	UserId	   string
+}
+
 const appkey string = "4O96nIItC1kCGSt2"
-const token string = "386562ddfc6740d09452ce18cdd01add"
+const token string = "4O96nIItC1kCGSt2"
 
 func OriginateProcess(appkey string, token string, audio []byte, format string, sampleRate int,
 	enablePunctuationPrediction bool, enableInverseTextNormalization bool, enableVoiceDetection bool) (string, error) {
@@ -69,7 +83,7 @@ func OriginateProcess(appkey string, token string, audio []byte, format string, 
 	return result, nil
 }
 
-func originate(w http.ResponseWriter, r *http.Request) {
+func CallHandle(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		var content Content
@@ -106,12 +120,12 @@ func originate(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Println("Auto Speech Recongition result ", result)
 
-		tag, err := detectStatus(result)
+		status, err := DetectCurrentStatus(result)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 		}
 
-		if tag == "Unknown" {
+		if status == "Unknown" {
 			content.Code = "200"
 			content.IsVacantNumber = 0
 			content.HangupState = "909"
@@ -120,7 +134,7 @@ func originate(w http.ResponseWriter, r *http.Request) {
 			content.Code = "200"
 			content.IsVacantNumber = 1
 			content.HangupState = "910"
-			content.VacantNumberType = tag
+			content.VacantNumberType = status
 		}
 
 		bs, err := json.Marshal(content)
@@ -136,12 +150,12 @@ func originate(w http.ResponseWriter, r *http.Request) {
 }
 
 
-func process(appkey string, token string, audio []byte, format string, sampleRate int,
+func process(appkey string, token string, audio []byte, format string, sampleRate string,
 	enablePunctuationPrediction bool, enableInverseTextNormalization bool, enableVoiceDetection bool) (string, error) {
 	var url string = "http://nls-gateway.cn-shanghai.aliyuncs.com/stream/v1/asr"
 	url = url + "?appkey=" + appkey
 	url = url + "&format=" + format
-	url = url + "&sample_rate=" + strconv.Itoa(sampleRate)
+	url = url + "&sample_rate=" + sampleRate
 	if enablePunctuationPrediction {
 		url = url + "&enable_punctuation_prediction=" + "true"
 	}
@@ -184,7 +198,7 @@ func process(appkey string, token string, audio []byte, format string, sampleRat
 }
 
 
-func detectStatus(result string) (string, error) {
+func DetectCurrentStatus(result string) (string, error) {
 	//var tag string
 	var status string
 	if result == "" {
@@ -224,64 +238,90 @@ func detectStatus(result string) (string, error) {
 }
 
 
-func formHandler(w http.ResponseWriter, r *http.Request) {
+func VacantHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		var content Content
 		var format string = "pcm"
-		var sampleRate int = 8000
+		var sampleRate string
 		var enablePunctuationPrediction bool = true
 		var enableInverseTextNormalization bool = true
 		var enableVoiceDetection = false
+		var httpResult Result
 
+		/* Parse parameters from http post request */
 		body, _ := ioutil.ReadAll(r.Body)
-
 		header := r.Header.Get("Content-Type")
-		fmt.Println("Content-Type ", header)
-
 		mediaType, params, err := mime.ParseMediaType(header)
 		if err != nil {
 			log.Fatal(err)
 		}
 		if strings.HasPrefix(mediaType, "audio/") {
-			//sampleRate = params["samplerate"]
-			fmt.Println("Params ", params["samplerate"])
-			fmt.Println("media type ", mediaType)
+			sampleRate = params["samplerate"]
 			if mediaType == "audio/pcm" {
 				format = "pcm"
 			}
 		}
+		fmt.Println("Content header " + header)
 
-		result, err := process(appkey, token, body, format, sampleRate,
+		/* Generate aliyun asr application access token */
+		client, err := sdk.NewClientWithAccessKey("cn-shanghai",
+				"LTAIjnlQdNmuZxfx", "0SWtcChhOrE6puneote4erXr7jejuJ")
+		if err != nil {
+			panic(err)
+		}
+		request := requests.NewCommonRequest()
+		request.Method = "POST"
+		request.Domain = "nls-meta.cn-shanghai.aliyuncs.com"
+		request.ApiName = "CreateToken"
+		request.Version = "2019-02-28"
+		response, err := client.ProcessCommonRequest(request)
+		if err != nil {
+			panic(err)
+		}
+
+		if response.GetHttpStatus() != 200 {
+			http.Error(w, "get_token_error", 500)
+		}
+
+		err = json.Unmarshal([]byte(response.GetHttpContentString()), &httpResult)
+		if err != nil {
+			panic(err)
+		}
+		//fmt.Printf("%d\n%s\n", httpResult.Token.ExpireTime, httpResult.Token.Id)
+
+		/* aliyun asr process, get asr result */
+		result, err := process(appkey, httpResult.Token.Id, body, format, sampleRate,
 			enablePunctuationPrediction, enableInverseTextNormalization, enableVoiceDetection)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 		}
-		fmt.Println("Auto Speech Recongition result ", result)
+		fmt.Println("Ringing result ", result)
 
-		tag, err := detectStatus(result)
+		status, err := DetectCurrentStatus(result)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 		}
 
-		if tag == "Unknown" {
+		if status == "933" {
 			content.Code = "200"
 			content.IsVacantNumber = 0
-			content.HangupState = "909"
-			content.VacantNumberType = "ttt"
+			content.HangupState = "900"
+			content.VacantNumberType = "none"
 		} else {
 			content.Code = "200"
 			content.IsVacantNumber = 1
-			content.HangupState = "910"
-			content.VacantNumberType = tag
+			content.HangupState = status
+			content.VacantNumberType = status
 		}
 
-		bs, err := json.Marshal(content)
+		jsonString, err := json.Marshal(content)
 		if err != nil {
 			fmt.Println(err)
-		} else {
-			fmt.Fprint(w, string(bs))
+			http.Error(w, err.Error(), 405)
 		}
+
+		fmt.Fprint(w, string(jsonString))
 
 	default:
 		http.Error(w, http.StatusText(405), 405)
@@ -289,10 +329,9 @@ func formHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 
-
 func main() {
-	http.HandleFunc("/vacantNumber", formHandler)
-	http.HandleFunc("/rojita/call", originate)
+	http.HandleFunc("/vacantNumber", VacantHandler)
+	http.HandleFunc("/rojita/call", CallHandle)
 	err := http.ListenAndServe(":4000", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
